@@ -1,0 +1,25 @@
+schema: sputnik.build.v1
+name: examples.map
+root: examples.map
+
+profiles:
+  required: [core.v1, ffi.v1]
+  optional: []
+  forbidden: []
+
+modules:
+  - name: plot
+    path: ../src/plot.s
+  - name: examples.map
+    path: map.s
+
+native_extensions:
+  - name: plot_png
+    language: c
+    sources:
+      - ../native/plot_png.c
+    symbols:
+      - logical: plot.render_png
+        symbol: sputnik_plot_render_png
+      - logical: plot.render_3d_png
+        symbol: sputnik_plot_render_3d_png
