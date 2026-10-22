@@ -1,0 +1,21 @@
+{
+  "name": "plot",
+  "version": "0.1.0",
+  "root": "plot",
+  "sources": [
+    "src/*.s"
+  ],
+  "native": [
+    {
+      "name": "plot_png",
+      "language": "c",
+      "sources": [
+        "native/plot_png.c"
+      ],
+      "symbols": {
+        "plot.render_png": "sputnik_plot_render_png",
+        "plot.render_3d_png": "sputnik_plot_render_3d_png"
+      }
+    }
+  ]
+}
