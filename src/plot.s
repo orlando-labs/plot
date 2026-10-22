@@ -26,11 +26,11 @@ class UnsupportedFormatError < PlotError
 
 native def _render_png_native(width as Int, height as Int, background as Str,
     commands as List) -> Bytes from "plot.render_png":
-  raise UnsupportedFormatError("PNG rendering requires a native sputnik-plot build")
+  raise UnsupportedFormatError("PNG rendering requires a native plot build")
 
 native def _render_3d_png_native(width as Int, height as Int,
     background as Str, scene as List) -> Bytes from "plot.render_3d_png":
-  raise UnsupportedFormatError("3D PNG rendering requires a native sputnik-plot build")
+  raise UnsupportedFormatError("3D PNG rendering requires a native plot build")
 
 class Diagnostic:
   attr severity
