@@ -1,6 +1,6 @@
 # Sputnik Plot
 
-`sputnik-plot` is a self-contained 2D and 3D plotting package for Sputnik. Its
+`plot` is a self-contained 2D and 3D plotting package for Sputnik. Its
 implemented core is deliberately geometry-first: arbitrary polygons and
 indexed meshes are the common representation for polygon art, triangulations,
 heatmaps, plans, maps and 3D surfaces. Built-in backends emit portable 2D SVG
