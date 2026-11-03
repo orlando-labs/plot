@@ -1,23 +1,30 @@
-schema: sputnik.build.v1
-name: plot
-root: plot
-
+requires:
+  sputnik: ">=1.0.0 <2.0.0"
+schema: "sputnik.build.v1"
+name: "plot"
+version: "0.1.0"
+source_root: "src"
 profiles:
-  required: [core.v1, ffi.v1]
+  required:
+    - "core.v1"
+    - "ffi.v1"
   optional: []
   forbidden: []
-
-modules:
-  - name: plot
-    path: src/plot.s
-
+files:
+  - "src/plot.s"
+  - "native/plot_png.c"
+  - "README.md"
+  - "API.md"
 native_extensions:
-  - name: plot_png
-    language: c
-    sources:
-      - native/plot_png.c
-    symbols:
-      - logical: plot.render_png
-        symbol: sputnik_plot_render_png
-      - logical: plot.render_3d_png
-        symbol: sputnik_plot_render_3d_png
+  -
+      name: "plot_png"
+      language: "c"
+      sources:
+        - "native/plot_png.c"
+      symbols:
+        -
+            logical: "plot.render_png"
+            symbol: "sputnik_plot_render_png"
+        -
+            logical: "plot.render_3d_png"
+            symbol: "sputnik_plot_render_3d_png"

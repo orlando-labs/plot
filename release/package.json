@@ -1,6 +1,6 @@
 {
   "name": "plot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "root": "plot",
   "sources": [
     "src/*.s"
@@ -17,5 +17,8 @@
         "plot.render_3d_png": "sputnik_plot_render_3d_png"
       }
     }
-  ]
+  ],
+  "requires": {
+    "sputnik": ">=1.0.0 <2.0.0"
+  }
 }
