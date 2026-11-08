@@ -6,6 +6,7 @@ package plot
 
 export figure, point, polygon, feature, palette
 export figure3d, point3, view3d
+export image, RasterImage
 export Figure, Point, Polygon, Feature, Palette, Layer, Diagnostic, Rendered
 export Figure3D, Point3, ViewState3D, Scene3D, Layer3D
 export PlotError, ValidationError, UnsupportedFormatError
@@ -31,6 +32,29 @@ native def _render_png_native(width as Int, height as Int, background as Str,
 native def _render_3d_png_native(width as Int, height as Int,
     background as Str, scene as List) -> Bytes from "plot.render_3d_png":
   raise UnsupportedFormatError("3D PNG rendering requires a native plot build")
+
+native def _decode_image_native(data as Bytes) -> List from "plot.decode_image":
+  raise UnsupportedFormatError("image decoding requires a native plot build")
+
+# Snapshot the source once. Both backends use the same decoded RGBA pixels;
+# SVG embeds a normalized PNG rather than retaining a path or external URL.
+class RasterImage:
+  attr width
+  attr height
+  attr png
+  attr pixels
+
+  def init(source):
+    data = source
+    if Str === source:
+      data = fs.read_bytes(source, limit: 67108864)
+    unless Bytes === data:
+      raise ArgumentError("image source must be a file path, Bytes, or RasterImage")
+    decoded = _decode_image_native(data)
+    @width = decoded[0]
+    @height = decoded[1]
+    @png = decoded[2]
+    @pixels = decoded[3]
 
 class Diagnostic:
   attr severity
@@ -327,6 +351,9 @@ class Figure:
   # Inert, versioned scene for notebook hosts. Screen geometry retains its
   # source coordinate transform, and guide/label semantics stay explicit.
   def notebook_scene():
+    # Version 1 notebook hosts cannot redraw raster layers. Keep their PNG
+    # fallback instead of offering an interactive scene with missing images.
+    return null if @layers.any? |layer|: layer.kind == :image
     bounds = @domain_value or _figure_bounds(@layers)
     layout = _layout(self, bounds)
     scene_layers = []
@@ -476,6 +503,32 @@ class Figure:
     _append(Layer(:annotation, _coerce_point(point), fill: fill, stroke: stroke,
       stroke_width: stroke_width, opacity: opacity, label: label,
       options: options))
+
+  # at is in data coordinates; size, anchor and offset are in screen pixels.
+  # A single explicit dimension preserves the source aspect ratio.
+  def image(source, at:, width: null, height: null, anchor: :center,
+      offset: [0, 0], opacity: 1):
+    position = _coerce_point(at)
+    fraction = _image_anchor(anchor)
+    unless Array === offset and offset.count() == 2:
+      raise ArgumentError("image offset must be [dx, dy] in pixels")
+    _require_number(offset[0], "image offset x")
+    _require_number(offset[1], "image offset y")
+    _require_number(opacity, "image opacity")
+    unless opacity >= 0 and opacity <= 1:
+      raise ArgumentError("image opacity must be between 0 and 1")
+    _require_positive(width, "image width") if width != null
+    _require_positive(height, "image height") if height != null
+    raster = if RasterImage === source then source else RasterImage(source)
+    w = width or raster.width
+    h = height or raster.height
+    w = height * (raster.width * 1.0 / raster.height) if width == null and height != null
+    h = width * (raster.height * 1.0 / raster.width) if height == null and width != null
+    _require_positive(w, "resolved image width")
+    _require_positive(h, "resolved image height")
+    _append(Layer(:image, position, opacity: opacity,
+      options: {image: raster, width: w, height: h,
+        anchor: fraction, offset: offset.copy}))
 
   # A map is a polygon layer with optional Web Mercator projection, equal
   # scales and no axes. Feature metadata is preserved in SVG <title> nodes.
@@ -785,6 +838,10 @@ class Figure3D:
 
 def figure(width: 1120, height: 700, background: "#ffffff"):
   Figure(width: width, height: height, background: background)
+
+def image(source):
+  return source if RasterImage === source
+  RasterImage(source)
 
 def figure3d(width: 1120, height: 760, background: "#f8fafc"):
   Figure3D(width: width, height: height, background: background)
@@ -1481,7 +1538,7 @@ def _figure_bounds(layers):
       layer.data.each |point|: _include_point(bounds, point)
     elif layer.kind == :guide:
       layer.data.each |point|: _include_point(bounds, point)
-    elif layer.kind == :annotation:
+    elif layer.kind == :annotation or layer.kind == :image:
       _include_point(bounds, layer.data)
   layers.each |layer|:
     if layer.kind == :vline:
@@ -1667,6 +1724,11 @@ def _png_layer(commands, layer, figure, layout, index, fit_labels: true):
       _png_points([layer.data], layout, figure.y_direction)])
     _png_annotation_label(commands, layer, [layer.data], layout,
       figure.y_direction, fit_labels: fit_labels)
+  elif layer.kind == :image:
+    rect = _image_rect(layer, layout, figure.y_direction)
+    raster = layer.options[:image]
+    commands.push!([7, rect[0], rect[1], rect[2], rect[3], layer.opacity,
+      raster.width, raster.height, raster.pixels])
   commands
 
 def _png_annotation_label(commands, layer, points, layout, y_direction, fit_labels: true):
@@ -1785,7 +1847,34 @@ def _render_layer(layer, figure, layout, index):
     return _render_annotation_line_layer(layer, figure, layout, index)
   if layer.kind == :annotation:
     return _render_annotation_point_layer(layer, figure, layout, index)
+  if layer.kind == :image:
+    return _render_image_layer(layer, figure, layout, index)
   ""
+
+def _image_anchor(anchor):
+  anchors = {center: [0.5, 0.5], top_left: [0, 0], top: [0.5, 0],
+    top_right: [1, 0], right: [1, 0.5], bottom_right: [1, 1],
+    bottom: [0.5, 1], bottom_left: [0, 1], left: [0, 0.5]}
+  unless anchors.has_key?(anchor):
+    raise ArgumentError("image anchor must be :center, :top_left, :top, :top_right, :right, :bottom_right, :bottom, :bottom_left, or :left")
+  anchors[anchor]
+
+def _image_rect(layer, layout, y_direction):
+  p = _screen_point(layer.data, layout, y_direction)
+  w = layer.options[:width]
+  h = layer.options[:height]
+  anchor = layer.options[:anchor]
+  offset = layer.options[:offset]
+  [p.x - anchor[0] * w + offset[0], p.y - anchor[1] * h + offset[1], w, h]
+
+def _render_image_layer(layer, figure, layout, index):
+  rect = _image_rect(layer, layout, figure.y_direction)
+  ("<image class=\"layer image\" data-layer=\"" + index.to_str +
+    "\" x=\"" + _n(rect[0]) + "\" y=\"" + _n(rect[1]) +
+    "\" width=\"" + _n(rect[2]) + "\" height=\"" + _n(rect[3]) +
+    "\" opacity=\"" + _n(layer.opacity) +
+    "\" preserveAspectRatio=\"none\" href=\"data:image/png;base64," +
+    Base64.encode(layer.options[:image].png) + "\"/>")
 
 def _render_colorbars(figure, layout):
   out = ["<g class=\"colorbars\" font-family=\"system-ui,sans-serif\" font-size=\"11\" fill=\"#374151\">"]

@@ -3,6 +3,25 @@
 Статус: спецификация v1; полигональное 2D-ядро, статический 3D-профиль, SVG и
 PNG backend реализованы.
 
+В версии 0.2.0 реализовано наложение растровых изображений на 2D-график:
+
+```sputnik
+plot.image(source) -> RasterImage
+Figure.image(source, at:, width: null, height: null, anchor: :center,
+  offset: [0, 0], opacity: 1) -> Figure
+```
+
+`source` — строка пути к файлу, `Bytes` с PNG/JPEG/BMP/GIF или готовый
+`RasterImage`. `at` — точка в координатах данных; размеры и `offset` — экранные
+пиксели. Без размеров используются исходные; один размер сохраняет пропорции,
+два задают растяжение. `anchor` — точка изображения: `:center`, `:top_left`,
+`:top`, `:top_right`, `:right`, `:bottom_right`, `:bottom`, `:bottom_left`,
+`:left`. Затем применяется произвольный `offset: [dx, dy]`, где X направлен
+вправо, Y вниз независимо от осей. Изображение читается один раз, встраивается
+в SVG и компонуется с PNG; при `view` пересчитывается положение и применяется
+обрезка по области графика. Полный контракт, ограничения форматов и примеры
+приведены в разделе Images at data coordinates в `README.md`.
+
 Реализованный geometry-first профиль описан в `README.md`. В него входят
 неизменяемые `Figure`, произвольные полигоны с отверстиями, `Feature`, индексные
 mesh/triangulation, face- и vertex-valued heatmap, матричные heatmap, карты с

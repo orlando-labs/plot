@@ -95,6 +95,48 @@ plot.figure()
 are screen-pixel offsets, so labels stay readable when the data domain changes.
 All annotation types and dash patterns render identically through SVG and PNG.
 
+## Images at data coordinates (0.2.0)
+
+`Figure.image` places a raster image at `at: [x, y]` (or a `Point`). The source
+can be a file path string, encoded `Bytes` in memory, or a reusable
+`plot.image(source)` / `RasterImage` value:
+
+```sputnik
+badge = plot.image("badge.png")
+plot.figure().line([[0, 0], [5, 8], [10, 3]])
+  .image(badge, at: [5, 8], width: 48, anchor: :bottom, offset: [0, -8])
+  .image(blob, at: [10, 3], width: 64, height: 32, anchor: :top_left,
+    offset: [6, 6], opacity: 0.8)
+  .save("images.png")
+```
+
+`width` and `height` are positive, finite screen-pixel sizes. Omit both to use
+the source dimensions; supply one to preserve the source aspect ratio; supply
+both to stretch to that rectangle. Sizes stay fixed when the domain changes.
+
+`anchor` identifies the point **on the image** attached to the data coordinate:
+`:center` (default), `:top_left`, `:top`, `:top_right`, `:right`,
+`:bottom_right`, `:bottom`, `:bottom_left`, or `:left`. `offset: [dx, dy]` then
+shifts that placement in screen pixels: positive X goes right and positive Y
+goes down, for either data-axis orientation. For an arbitrary top-left offset,
+use `anchor: :top_left, offset: [dx, dy]`. `opacity` ranges from 0 to 1.
+
+PNG, JPEG, BMP and GIF are decoded by the bundled
+[stb_image](https://github.com/nothings/stb/blob/4e9b368bfc071e97206ea5c6adba68dd0cbf8897/stb_image.h)
+decoder; GIF uses its first frame, and JPEG EXIF orientation is not applied.
+Input is limited to 64 MiB, 16384 pixels per side and 16 million pixels total.
+Invalid or unsupported data raises `ArgumentError`; filesystem failures retain
+their usual errors. Loading a path requires the normal filesystem-read grant;
+decoding requires a native adapter (including for SVG output).
+
+The source is read and decoded once when added or loaded with `plot.image`.
+Rendering never rereads it. SVG embeds a PNG data URI; PNG composites the same
+RGBA pixels with alpha-aware bilinear resizing. Images follow layer order,
+remain upright, contribute their anchor point to automatic bounds, and are
+clipped to the plot area, including in `view(...)`. Notebook hosts using scene
+version 1 display the complete PNG for figures containing images; interactive
+zoom remains available through `view(...)` in code.
+
 ## 2D data views and notebook zoom
 
 `Figure.view` creates a new figure with a data-coordinate window. It is not a
@@ -192,7 +234,8 @@ even-odd polygon fills (including holes), 2D mesh faces, antialiased lines and
 points, axes, labels and colorbars. Its 3D path adds camera projection, depth
 testing, opaque and transparent passes, triangle shading, mesh edges,
 depth-aware lines, points and contour overlays. It uses Sputnik's native extension
-ABI but no third-party raster or compression dependency. Bytecode-only
-execution reports that PNG requires a native package build. Unsupported formats
+ABI; its bundled image decoder needs no additional system libraries. Execution
+without a native adapter reports that PNG and image decoding require a native
+package build. Unsupported formats
 such as PDF are rejected with `UnsupportedFormatError`; the package never
 writes a differently encoded file under a misleading extension.

@@ -110,7 +110,7 @@ for src in cfg['sources']:
 if cfg.get('dependencies'):data['dependencies']={'slowpilot/'+k:v for k,v in cfg['dependencies'].items()}
 if cfg.get('capabilities'):data['capabilities']=cfg['capabilities']
 files=[]
-for name in ['README.md','LICENSE','API.md']:
+for name in ['README.md','LICENSE','API.md','THIRD_PARTY_NOTICES.md']:
     if (repo/name).is_file():
         if name.endswith('.md'):(stage/name).write_text(rewrite((repo/name).read_text()))
         else:shutil.copy2(repo/name,stage/name)

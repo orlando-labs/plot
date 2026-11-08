@@ -6,6 +6,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Pinned, vendored stb_image; see vendor/README.md. No file I/O in the
+ * decoder: Sputnik's fs capability controls all reads. */
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#define STBI_NO_STDIO
+#define STBI_NO_HDR
+#define STBI_NO_LINEAR
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_BMP
+#define STBI_ONLY_GIF
+#define STBI_MAX_DIMENSIONS 16384
+#include "vendor/stb_image.h"
+
 typedef struct {
   double x;
   double y;
@@ -100,16 +114,19 @@ static void blend_pixel(PlotCanvas *canvas, int x, int y, PlotColor color,
   uint8_t *pixel;
   double alpha;
   double inverse;
+  double destination_alpha, output_alpha;
   if (x < 0 || y < 0 || x >= canvas->width || y >= canvas->height) return;
   if (x < canvas->clip_left || y < canvas->clip_top || x >= canvas->clip_right || y >= canvas->clip_bottom) return;
   alpha = clamp_double(opacity, 0.0, 1.0) * ((double)color.a / 255.0);
   if (alpha <= 0.0) return;
   pixel = canvas->pixels + ((size_t)y * (size_t)canvas->width + (size_t)x) * 4;
   inverse = 1.0 - alpha;
-  pixel[0] = (uint8_t)clamp_double(color.r * alpha + pixel[0] * inverse, 0, 255);
-  pixel[1] = (uint8_t)clamp_double(color.g * alpha + pixel[1] * inverse, 0, 255);
-  pixel[2] = (uint8_t)clamp_double(color.b * alpha + pixel[2] * inverse, 0, 255);
-  pixel[3] = (uint8_t)clamp_double(255.0 * alpha + pixel[3] * inverse, 0, 255);
+  destination_alpha = pixel[3] / 255.0;
+  output_alpha = alpha + destination_alpha * inverse;
+  pixel[0] = (uint8_t)clamp_double((color.r * alpha + pixel[0] * destination_alpha * inverse) / output_alpha, 0, 255);
+  pixel[1] = (uint8_t)clamp_double((color.g * alpha + pixel[1] * destination_alpha * inverse) / output_alpha, 0, 255);
+  pixel[2] = (uint8_t)clamp_double((color.b * alpha + pixel[2] * destination_alpha * inverse) / output_alpha, 0, 255);
+  pixel[3] = (uint8_t)clamp_double(255.0 * output_alpha, 0, 255);
 }
 
 static double point_segment_distance(double px, double py, PlotPoint a,
@@ -520,6 +537,78 @@ static uint8_t *encode_png(const PlotCanvas *canvas, size_t *length_out) {
   return png;
 }
 
+SputnikStatus sputnik_plot_decode_image(SputnikCtx *cx,
+    const SputnikValue *args, size_t argc, SputnikValue *out) {
+  const uint8_t *data;
+  size_t length, png_length;
+  int width, height, channels;
+  uint8_t *pixels, *png;
+  SputnikValue values[4];
+  PlotCanvas source = {0};
+  if (argc != 1 || !sputnik_bytes_view(cx, args[0], &data, &length) ||
+      length == 0 || length > 67108864)
+    return sputnik_fault(cx, "ArgumentError", "image data must contain 1 to 67108864 bytes");
+  if (!stbi_info_from_memory(data, (int)length, &width, &height, &channels))
+    return sputnik_fault(cx, "ArgumentError", "invalid image; supported formats are PNG, JPEG, BMP and GIF");
+  if (width < 1 || height < 1 || width > 16384 || height > 16384 ||
+      (size_t)width * (size_t)height > 16000000)
+    return sputnik_fault(cx, "ArgumentError", "image exceeds 16384 pixels per side or 16000000 pixels total");
+  pixels = stbi_load_from_memory(data, (int)length, &width, &height, &channels, 4);
+  if (!pixels)
+    return sputnik_fault(cx, "ArgumentError", "cannot decode image: corrupt or unsupported image data");
+  source.width = width; source.height = height; source.pixels = pixels;
+  png = encode_png(&source, &png_length);
+  if (!png) {
+    stbi_image_free(pixels);
+    return sputnik_fault(cx, "RuntimeError", "image encoder is out of memory");
+  }
+  values[0] = sputnik_make_int(cx, width);
+  values[1] = sputnik_make_int(cx, height);
+  values[2] = sputnik_make_bytes(cx, png, png_length);
+  values[3] = sputnik_make_bytes(cx, pixels, (size_t)width * (size_t)height * 4);
+  free(png); stbi_image_free(pixels);
+  *out = sputnik_make_list(cx, values, 4);
+  return SPUTNIK_OK;
+}
+
+/* Bilinear interpolation in premultiplied alpha avoids dark fringes around
+ * transparent source pixels. Iterate only the visible destination rectangle. */
+static void draw_image(PlotCanvas *canvas, const uint8_t *pixels, int sw, int sh,
+                       double x, double y, double w, double h, double opacity) {
+  int left = (int)clamp_double(ceil(x - 0.5), canvas->clip_left, canvas->clip_right);
+  int top = (int)clamp_double(ceil(y - 0.5), canvas->clip_top, canvas->clip_bottom);
+  int right = (int)clamp_double(ceil(x + w - 0.5), canvas->clip_left, canvas->clip_right);
+  int bottom = (int)clamp_double(ceil(y + h - 0.5), canvas->clip_top, canvas->clip_bottom);
+  int px, py;
+  for (py = top; py < bottom; ++py) {
+    double v = clamp_double(((py + 0.5 - y) / h) * sh - 0.5, 0, sh - 1);
+    int y0 = (int)floor(v), y1 = y0 + 1 < sh ? y0 + 1 : y0;
+    double fy = v - y0;
+    for (px = left; px < right; ++px) {
+      double u = clamp_double(((px + 0.5 - x) / w) * sw - 0.5, 0, sw - 1);
+      int x0 = (int)floor(u), x1 = x0 + 1 < sw ? x0 + 1 : x0;
+      double fx = u - x0;
+      const uint8_t *samples[4] = {
+        pixels + ((size_t)y0 * sw + x0) * 4, pixels + ((size_t)y0 * sw + x1) * 4,
+        pixels + ((size_t)y1 * sw + x0) * 4, pixels + ((size_t)y1 * sw + x1) * 4};
+      double weights[4] = {(1-fx)*(1-fy), fx*(1-fy), (1-fx)*fy, fx*fy};
+      double a = 0, rgb[3] = {0, 0, 0};
+      int i, c;
+      PlotColor color;
+      for (i = 0; i < 4; ++i) {
+        double wa = weights[i] * samples[i][3];
+        a += wa;
+        for (c = 0; c < 3; ++c) rgb[c] += samples[i][c] * wa;
+      }
+      if (a <= 0) continue;
+      color = (PlotColor){(uint8_t)clamp_double(rgb[0]/a, 0, 255),
+        (uint8_t)clamp_double(rgb[1]/a, 0, 255), (uint8_t)clamp_double(rgb[2]/a, 0, 255),
+        (uint8_t)clamp_double(a, 0, 255)};
+      blend_pixel(canvas, px, py, color, opacity);
+    }
+  }
+}
+
 static SputnikStatus render_command(SputnikCtx *cx, PlotCanvas *canvas,
                                   SputnikValue command) {
   int64_t kind = 0;
@@ -630,6 +719,25 @@ static SputnikStatus render_command(SputnikCtx *cx, PlotCanvas *canvas,
   if (kind == 6 && length == 1) {
     canvas->clip_left = canvas->clip_top = 0;
     canvas->clip_right = canvas->width; canvas->clip_bottom = canvas->height;
+    return SPUTNIK_OK;
+  }
+  if (kind == 7) {
+    double x, y, w, h, opacity;
+    int64_t sw, sh;
+    const uint8_t *pixels;
+    size_t pixel_length;
+    if (length != 9 || !list_number(cx, command, 1, &x) ||
+        !list_number(cx, command, 2, &y) || !list_number(cx, command, 3, &w) ||
+        !list_number(cx, command, 4, &h) || !list_number(cx, command, 5, &opacity) ||
+        !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h) ||
+        w <= 0 || h <= 0 || !isfinite(opacity) || opacity < 0 || opacity > 1 ||
+        !sputnik_as_int(cx, sputnik_list_at(cx, command, 6), &sw) ||
+        !sputnik_as_int(cx, sputnik_list_at(cx, command, 7), &sh) ||
+        sw < 1 || sh < 1 || sw > 16384 || sh > 16384 || sw * sh > 16000000 ||
+        !sputnik_bytes_view(cx, sputnik_list_at(cx, command, 8), &pixels, &pixel_length) ||
+        pixel_length != (size_t)sw * (size_t)sh * 4)
+      return sputnik_fault(cx, "ArgumentError", "invalid PNG image command");
+    draw_image(canvas, pixels, (int)sw, (int)sh, x, y, w, h, opacity);
     return SPUTNIK_OK;
   }
   return sputnik_fault(cx, "ArgumentError", "unknown PNG drawing command");

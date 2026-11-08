@@ -18,8 +18,12 @@ native_extensions:
     language: c
     sources:
       - ../native/plot_png.c
+    headers:
+      - ../native/vendor/stb_image.h
     symbols:
       - logical: plot.render_png
         symbol: sputnik_plot_render_png
       - logical: plot.render_3d_png
         symbol: sputnik_plot_render_3d_png
+      - logical: plot.decode_image
+        symbol: sputnik_plot_decode_image

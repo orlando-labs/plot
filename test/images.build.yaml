@@ -1,0 +1,26 @@
+schema: sputnik.build.v1
+name: plot.images_test
+root: plot.images_test
+profiles:
+  required: [core.v1, ffi.v1]
+  optional: []
+  forbidden: []
+modules:
+  - name: plot
+    path: ../src/plot.s
+  - name: plot.images_test
+    path: images.s
+native_extensions:
+  - name: plot_png
+    language: c
+    sources:
+      - ../native/plot_png.c
+    headers:
+      - ../native/vendor/stb_image.h
+    symbols:
+      - logical: plot.render_png
+        symbol: sputnik_plot_render_png
+      - logical: plot.render_3d_png
+        symbol: sputnik_plot_render_3d_png
+      - logical: plot.decode_image
+        symbol: sputnik_plot_decode_image

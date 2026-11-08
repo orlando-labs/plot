@@ -5,13 +5,11 @@ from plot import UnsupportedFormatError
 
 export main
 
-EXPECTED = 32
+EXPECTED = 53
 
 def check(score, condition):
-  if condition:
-    score + 1
-  else:
-    score
+  raise ValueError("plot selftest failed at check " + (score + 1).to_str) unless condition
+  score + 1
 
 def main():
   score = 0
@@ -159,5 +157,67 @@ def main():
   rescue UnsupportedFormatError |error|:
     unsupported = error.message.contains?(":svg") and error.message.contains?(":png")
   score = check(score, unsupported)
+
+  # Compressed RGBA PNG: red, half-transparent green, blue, transparent yellow.
+  blob = Base64.decode("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DwHwgbGIA0EDAwAABB1Qd6cSjDtAAAAABJRU5ErkJggg==")
+  raster = plot.image(blob)
+  score = check(score, raster.width == 2 and raster.height == 2 and
+    raster.pixels.hex() == "ff0000ff00ff00800000ffffffff0000")
+  frame = plot.figure(width: 100, height: 100).axes(show: false)
+    .coordinates(padding: 0).domain(0, 0, 10, 10)
+  anchored = [[:center, 40, 45], [:top_left, 50, 50], [:top, 40, 50],
+    [:top_right, 30, 50], [:right, 30, 45], [:bottom_right, 30, 40],
+    [:bottom, 40, 40], [:bottom_left, 50, 40], [:left, 50, 45]]
+  anchored.each |entry|:
+    f = frame.image(raster, at: [5, 5], width: 20, height: 10, anchor: entry[0])
+    pixels = plot.image(f.bytes(format: :png)).pixels
+    index = (entry[2] * 100 + entry[1]) * 4
+    score = check(score, pixels.slice(index, 4).hex() == "ff0000ff" and
+      pixels.slice(index - 4, 4).hex() == "ffffffff")
+  natural = frame.image(blob, at: [5, 5], anchor: :top_left)
+  natural_pixels = plot.image(natural.bytes(format: :png)).pixels
+  score = check(score, natural_pixels.slice(20204, 4).hex() == "7fff7fff" and
+    natural_pixels.slice(20604, 4).hex() == "ffffffff")
+  embedded = natural.text()
+  score = check(score, embedded.contains?("<image class=\"layer image\"") and
+    embedded.contains?("href=\"data:image/png;base64,") and
+    embedded.contains?("preserveAspectRatio=\"none\""))
+  score = check(score, frame.layers.count() == 0 and natural.layers.count() == 1 and
+    natural.notebook_scene() == null)
+  resized = frame.image(raster, at: [5, 5], width: 24)
+  score = check(score, resized.layers[0].options[:height] == 24 and
+    frame.image(raster, at: [5, 5], height: 18).layers[0].options[:width] == 18)
+  shifted = frame.image(raster, at: [5, 5], width: 20, height: 10,
+    anchor: :top_left, offset: [3, -4], opacity: 0.5)
+  shifted_pixels = plot.image(shifted.bytes(format: :png)).pixels
+  score = check(score, shifted_pixels.slice((46 * 100 + 53) * 4, 4).hex() == "ff7f7fff")
+  clipped = frame.image(raster, at: [0, 10], width: 20, height: 10)
+  score = check(score, plot.image(clipped.bytes(format: :png)).pixels.slice(0, 4).hex() != "ffffffff" and
+    clipped.view(x: [5, 10]).layers == clipped.layers)
+  # Images stay upright when the data Y direction changes.
+  down = frame.coordinates(y: :down).image(raster, at: [5, 2], anchor: :top_left)
+  score = check(score, plot.image(down.bytes(format: :png)).pixels.slice(8200, 4).hex() == "ff0000ff")
+  transparent = plot.figure(width: 4, height: 4, background: "transparent")
+    .axes(show: false).coordinates(padding: 0).domain(0, 0, 4, 4)
+    .image(raster, at: [0, 4], anchor: :top_left)
+  score = check(score, plot.image(transparent.bytes(format: :png)).pixels.slice(4, 4).hex() == "00ff0080")
+  invalid_image = false
+  try:
+    frame.image(Bytes.new("invalid"), at: [0, 0])
+  rescue ArgumentError:
+    invalid_image = true
+  score = check(score, invalid_image)
+  invalid_anchor = false
+  try:
+    frame.image(raster, at: [0, 0], anchor: :unknown)
+  rescue ArgumentError:
+    invalid_anchor = true
+  score = check(score, invalid_anchor)
+  invalid_size = false
+  try:
+    frame.image(raster, at: [0, 0], width: 0)
+  rescue ArgumentError:
+    invalid_size = true
+  score = check(score, invalid_size)
 
   score

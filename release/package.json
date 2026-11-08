@@ -1,6 +1,6 @@
 {
   "name": "plot",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "root": "plot",
   "sources": [
     "src/*.s"
@@ -14,8 +14,12 @@
       ],
       "symbols": {
         "plot.render_png": "sputnik_plot_render_png",
-        "plot.render_3d_png": "sputnik_plot_render_3d_png"
-      }
+        "plot.render_3d_png": "sputnik_plot_render_3d_png",
+        "plot.decode_image": "sputnik_plot_decode_image"
+      },
+      "headers": [
+        "native/vendor/stb_image.h"
+      ]
     }
   ],
   "requires": {
