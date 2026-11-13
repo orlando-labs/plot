@@ -215,8 +215,12 @@ underlay for transparent pixels. They suppress the ordinary gray grid.
 `spacing` pixels per minor sample cell. The sample is independent of a figure's
 data coordinates. `texture: false` disables paper grain. SVG embeds a single
 grain image and vector grid lines; PNG composites the same grain and lines.
-Both remain self-contained. Scene-v1 notebook hosts continue to show the full
-PNG; use `view(...)` in code to render a reproducible zoom.
+Both remain self-contained. From 0.3.1, Notebook scene v2 also transports the
+bounded RGBA grain tile, tick-step settings and typography. Updated macOS and
+web viewers recalculate the grid and labels locally on selection, pan, zoom
+and reset, and use the same renderer for PNG export. Older scene-v1 viewers
+keep the full PNG fallback. Arbitrary image layers and custom raster backgrounds
+remain raster-only. Use `view(...)` in code to save a reproducible range.
 
 2D export text defaults to dark `#1f2937`, with 16 px ticks and colorbar labels,
 18 px axis names, 26 px titles, and 16 px annotations. PNG's built-in bitmap

@@ -395,10 +395,10 @@ class Figure:
   # Inert, versioned scene for notebook hosts. Screen geometry retains its
   # source coordinate transform, and guide/label semantics stay explicit.
   def notebook_scene():
-    # Version 1 notebook hosts cannot redraw raster layers. Keep their PNG
-    # fallback instead of offering an interactive scene with missing images.
+    # Arbitrary image layers still use PNG. Scene v2 transports the bounded
+    # grain tile and data-grid metadata, never executable drawing callbacks.
     return null if @layers.any? |layer|: layer.kind == :image
-    return null if TiledBackground === @background
+    return null if TiledBackground === @background and not GraphPaper === @background
     bounds = @domain_value or _figure_bounds(@layers)
     layout = _layout(self, bounds)
     scene_layers = []
@@ -419,11 +419,18 @@ class Figure:
       scene_layers.push!(metadata)
     decorations = []
     _png_colorbars(decorations, self, layout)
-    {version: 1, bounds: bounds, frame: [layout[:left], layout[:top], layout[:plot_width], layout[:plot_height]],
+    scene = {version: 2, bounds: bounds, frame: [layout[:left], layout[:top], layout[:plot_width], layout[:plot_height]],
       padding: @padding_value, color_scale: _has_color_scale(@layers), aspect_equal: @aspect_mode == :equal,
-      y_down: @y_direction == :down, axes: @axes_visible, background: @background,
+      y_down: @y_direction == :down, axes: @axes_visible, background: _background_color(@background),
+      typography: {size: @font_size, color: @text_color},
+      ticks: {x_step: @x_step, y_step: @y_step},
       title: (@title_text or "").to_str, x_label: (@x_label or "").to_str, y_label: (@y_label or "").to_str,
       layers: scene_layers, decorations: decorations}
+    if GraphPaper === @background:
+      grain = @background.texture_raster
+      scene.store!(:paper, {ink: @background.ink, spacing: @background.spacing,
+        width: grain.width, height: grain.height, rgba: Base64.encode(grain.pixels)})
+    scene
 
   def palette(value):
     _copy({palette: _palette_of(value)})

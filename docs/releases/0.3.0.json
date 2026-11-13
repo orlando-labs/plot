@@ -1,0 +1,45 @@
+{
+  "version": "0.3.0",
+  "artifacts": [
+    {
+      "variant": "linux-x86_64-gnu-prebuilt-bytecode",
+      "sha256": "sha256:c32b7a2d84d017c24ab14ecb2c5b5d8e86a3dbda653b65239e1acc2faad0c10e",
+      "bytes": 413806
+    },
+    {
+      "variant": "linux-x86_64-gnu-prebuilt-source",
+      "sha256": "sha256:1711e2e52c88e69db9c6c1628147fc30816edf5696e5fc543dca93ada8413752",
+      "bytes": 112102
+    },
+    {
+      "variant": "linux-x86_64-gnu-source-bytecode",
+      "sha256": "sha256:09d7fc443c6f33dfb54010a7a96c5b36767cc66ec5d963d6646d9fa2f382edde",
+      "bytes": 427123
+    },
+    {
+      "variant": "linux-x86_64-gnu-source-source",
+      "sha256": "sha256:788e40cd07349ac0854b89dced0c99ab396eb1adc299623058ff3ad23f2e195e",
+      "bytes": 124190
+    },
+    {
+      "variant": "macos-aarch64-prebuilt-bytecode",
+      "sha256": "sha256:7f6fdd002077a1556aa25a957ae6a62ede87b914692206c298dc3e173b90eaae",
+      "bytes": 402003
+    },
+    {
+      "variant": "macos-aarch64-prebuilt-source",
+      "sha256": "sha256:18e8a292eca72ee3a2c633d9bbc20fb52820cac612b2105474feec1b622641a2",
+      "bytes": 100810
+    },
+    {
+      "variant": "macos-aarch64-source-bytecode",
+      "sha256": "sha256:09637b8ae0e84aad62fa11ebd1356695aeacfcfac4df52be6bb81db7ba622a4b",
+      "bytes": 427110
+    },
+    {
+      "variant": "macos-aarch64-source-source",
+      "sha256": "sha256:0e79f0bb619445bf46587cb8d0b40c1545f8959f7a4f8d488319f9731bf79deb",
+      "bytes": 124183
+    }
+  ]
+}

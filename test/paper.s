@@ -43,6 +43,12 @@ def main():
   require(amber.raster.png.hex() == plot.graph_paper().raster.png.hex(), "paper is not reproducible")
   require(amber.raster.png.hex() != blue.raster.png.hex(), "paper palettes identical")
   require(amber.raster.png.hex() != plot.graph_paper(texture: false).raster.png.hex(), "texture has no effect")
+  interactive = plot.figure(background: amber).axes(x_step: 2).typography(size: 20).notebook_scene()
+  require(interactive[:version] == 2 and interactive[:background] == amber.color and
+    interactive[:paper][:width] == 80 and interactive[:paper][:height] == 80 and
+    Base64.decode(interactive[:paper][:rgba]).hex() == amber.texture_raster.pixels.hex() and
+    interactive[:ticks][:x_step] == 2 and interactive[:typography][:size] == 20,
+    "interactive paper scene metadata or grain differs")
   # A generic tile remains a screen-space decoration; graph paper separates
   # its stationary grain from a grid anchored to actual data coordinates.
   flat = plot.graph_paper(texture: false)

@@ -106,7 +106,7 @@ def main():
     zoom_svg.contains?("inside") and not zoom_svg.contains?("outside"))
   score = check(score, zoomed.render(format: :png).bytes.slice(0, 8).hex() == "89504e470d0a1a0a")
   zoom_scene = zoomed.coordinates(y: :down).notebook_scene()
-  score = check(score, zoom_scene[:version] == 1 and zoom_scene[:y_down] and
+  score = check(score, zoom_scene[:version] == 2 and zoom_scene[:y_down] and
     zoom_scene[:bounds] == [1, 0, 3, 10] and zoom_scene[:layers].count() == 3)
   bad_view = false
   try:

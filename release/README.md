@@ -13,8 +13,9 @@ exported macros; mixed variants retain macro provider sources. Native packages
 also support `--native prebuilt` on a tested target. Outputs are verified before
 publication. Caches, credentials and interpreter installations are excluded.
 
-Release 0.3.0 adds data-aligned graph paper, explicit tick steps and readable
-2D typography. It provides source and bytecode modules with either source or
+Release 0.3.1 adds scene-v2 transport for interactive graph paper, tick steps
+and typography in Notebook. Version 0.3.0 introduced data-aligned graph paper
+and readable 2D export. The release provides source and bytecode modules with either source or
 prebuilt native adapters, on macOS arm64 and Linux x86-64 GNU (eight variants).
 Build native adapters on their actual target. For each platform:
 
