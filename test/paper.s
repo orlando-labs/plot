@@ -43,15 +43,59 @@ def main():
   require(amber.raster.png.hex() == plot.graph_paper().raster.png.hex(), "paper is not reproducible")
   require(amber.raster.png.hex() != blue.raster.png.hex(), "paper palettes identical")
   require(amber.raster.png.hex() != plot.graph_paper(texture: false).raster.png.hex(), "texture has no effect")
-  # Compare the entire rendered canvas, including all tile boundaries, with
-  # natural-sized source pixels. This also catches doubled grid lines at seams.
-  sheet = plot.figure(width: 163, height: 161, background: amber)
-    .axes(show: false).coordinates(padding: 0)
-  sheet_pixels = plot.image(sheet.bytes(format: :png)).pixels
-  161.times |y|:
-    163.times |x|:
-      require(sheet_pixels.slice((y * 163 + x) * 4, 4).hex() ==
-        amber.raster.pixels.slice(((y % 80) * 80 + x % 80) * 4, 4).hex(), "grid seam changed")
+  # A generic tile remains a screen-space decoration; graph paper separates
+  # its stationary grain from a grid anchored to actual data coordinates.
+  flat = plot.graph_paper(texture: false)
+  grid = plot.figure(width: 480, height: 360, background: flat)
+    .coordinates(padding: 40).domain(-1, -1, 3, 3).axes(x_step: 1, y_step: 1)
+  whole = grid.text()
+  require(whole.contains?("paper-grid-line major x\" data-value=\"0\" x1=\"140\"") and
+    whole.contains?("axis-tick x\" data-value=\"0\" x=\"140\""), "major grid and X tick differ")
+  require(whole.contains?("paper-grid-line major y\" data-value=\"0\" x1=\"40\" y1=\"250\""),
+    "major Y grid differs from data transform")
+  zoom = grid.view(x: [0.25, 2.25])
+  require(zoom.x_step == 1 and zoom.y_step == 1 and grid.domain_value == [-1, -1, 3, 3],
+    "view lost fixed steps or mutated original")
+  require(zoom.text().contains?("paper-grid-line major x\" data-value=\"1\" x1=\"190\"") and
+    zoom.text().contains?("axis-tick x\" data-value=\"1\" x=\"190\""), "zoom grid and tick differ")
+  down = grid.coordinates(y: :down).text()
+  require(down.contains?("paper-grid-line major y\" data-value=\"0\" x1=\"40\" y1=\"110\""),
+    "downward Y grid differs")
+  equal = grid.coordinates(aspect: :equal).text()
+  require(equal.contains?("paper-grid-line major x\" data-value=\"0\" x1=\"170\""),
+    "equal-aspect grid ignores centered frame")
+  auto = plot.figure(width: 480, height: 360, background: flat)
+    .coordinates(padding: 40).domain(-0.3, -0.6, 3.7, 3.4)
+  require(auto.text().contains?("paper-grid-line major x\" data-value=\"0\" x1=\"70\""),
+    "automatic grid follows view edge instead of data zero")
+  auto.view(x: [0.001, 0.007], y: [-0.0005, 0.0005]).bytes(format: :png)
+  auto.domain(1.0e250, 1.0e-100, 2.0e250, 2.0e-100).bytes(format: :png)
+  precise = auto.axes(x_step: 0.00000001).view(x: [1, 1.00000004]).text()
+  require(precise.contains?(">1.00000001</text>") and precise.contains?(">1.00000002</text>"),
+    "deep zoom collapses distinct tick labels")
+  # Raster positions must agree with the SVG transform as well.
+  before_pixels = plot.image(grid.bytes(format: :png)).pixels
+  after_pixels = plot.image(zoom.bytes(format: :png)).pixels
+  require(before_pixels.slice((62 * 480 + 140) * 4, 4).hex() != "faf3dfff" and
+    before_pixels.slice((62 * 480 + 145) * 4, 4).hex() == "faf3dfff", "PNG major line position differs")
+  require(after_pixels.slice((62 * 480 + 190) * 4, 4).hex() != "faf3dfff" and
+    after_pixels.slice((62 * 480 + 140) * 4, 4).hex() == "faf3dfff", "PNG grid did not scale and pan")
+  require(whole.contains?("font-size=\"16\" fill=\"#1f2937\""), "default text size or contrast")
+  styled = grid.typography(size: 20, color: "#152535").view(x: [0, 2])
+  require(styled.font_size == 20 and styled.text_color == "#152535" and
+    styled.text().contains?("font-size=\"20\" fill=\"#152535\""), "typography lost on copy")
+  letters = plot.figure(width: 96, height: 96).axes(show: false).coordinates(padding: 0)
+    .annotate([0.5, 0.5], "H", fill: "none", stroke: "none", label_size: 17, dx: 0, dy: 0)
+    .domain(0, 0, 1, 1)
+  glyph = plot.image(letters.bytes(format: :png)).pixels
+  first_row = 96
+  last_row = -1
+  96.times |y|:
+    96.times |x|:
+      if glyph.slice((y * 96 + x) * 4, 4).hex() != "ffffffff":
+        first_row = Math.min(first_row, y)
+        last_row = Math.max(last_row, y)
+  require(last_row - first_row + 1 == 17, "PNG font size still rounds down")
   with_axes = plot.figure(width: 300, height: 200, background: amber).line([[0, 0], [1, 1]])
   require(not with_axes.text().contains?("#e5e7eb"), "default grid overlays paper")
   require(plot.figure().text().contains?("#e5e7eb"), "ordinary grid disappeared")
@@ -84,5 +128,18 @@ def main():
   rescue ArgumentError:
     rejected = true
   require(rejected, "invalid texture flag accepted")
-  print("PASS paper tiling, seams, alpha, SVG, views, snapshots and validation")
+  [0, -1, "1"].each |step|:
+    rejected = false
+    try:
+      grid.axes(x_step: step)
+    rescue ArgumentError:
+      rejected = true
+    require(rejected, "invalid tick step accepted")
+  rejected = false
+  try:
+    grid.axes(x_step: 0.000001).bytes(format: :png)
+  rescue ArgumentError:
+    rejected = true
+  require(rejected, "unbounded grid iteration accepted")
+  print("PASS paper tiles, data grid, ticks, zoom, orientation, alpha and typography")
   0

@@ -187,18 +187,43 @@ custom = plot.tiled_background("paper-tile.png", color: "#ffffff")
 plot.figure(background: custom).line([[0, 0], [1, 1]]).save("custom.svg")
 ```
 
-`spacing` is an integer from 4 to 32 screen pixels. A tile spans ten cells on
-each side (80 × 80 pixels by default); `texture: false` produces clean paper.
-Each figure repeats its tile at natural size from canvas pixel `(0, 0)`, under
-axes, text and data. The tile is read once, embedded once into the SVG pattern,
-and repeated with alpha compositing in PNG. `color` is the underlay visible
-through transparent pixels of custom tiles. The ordinary gray axis grid is
-suppressed for tiled backgrounds; axes, ticks and labels remain visible.
+`graph_paper` returns a `GraphPaper` background. Its grain repeats at natural
+pixel size, while grid lines are drawn separately **in data coordinates inside
+the plot frame**. Major lines and axis ticks share one calculation, anchored to
+multiples of the tick step from data zero. Each major interval has ten minor
+subdivisions and a stronger half-interval line. `view` and `screen` recompute
+the coordinate transform, clipping and ticks, including for downward Y and
+equal-aspect coordinates. Margins keep the paper grain without grid lines.
 
-This is a decorative screen grid: its lines do not represent data units, and
-`view` and `screen` retain the same paper scale and phase. It currently applies
-to 2D figures. Scene-v1 notebook hosts show the complete PNG, as they do for
-raster image layers; use `view(...)` in code to export a detail.
+By default, each view chooses a readable major step from 1, 2, 2.5, 5 × a power
+of ten. `spacing` (integer 4–32, default 8) is a density hint for this automatic
+selection, rather than a fixed screen-pixel grid. Set explicit steps in **data
+units** to retain exactly the same units per cell through zoom:
+
+```sputnik
+p = plot.figure(background: plot.graph_paper(style: :blue))
+  .axes(x_step: 2, y_step: 0.5, x_label: "VOLTAGE / V", y_label: "CURRENT / mA")
+  .line([[0, 0], [4, 1], [8, 2]])
+p.view(x: [1, 5], y: [0.25, 1.25]).save("detail.png")
+# .axes(x_step: null, y_step: null) restores automatic steps.
+```
+
+Custom `tiled_background` images retain their original behavior: read once,
+repeat at natural size from canvas `(0, 0)`, with an optional solid `color`
+underlay for transparent pixels. They suppress the ordinary gray grid.
+`GraphPaper.save` exports a standalone sample tile (80 × 80 by default), with
+`spacing` pixels per minor sample cell. The sample is independent of a figure's
+data coordinates. `texture: false` disables paper grain. SVG embeds a single
+grain image and vector grid lines; PNG composites the same grain and lines.
+Both remain self-contained. Scene-v1 notebook hosts continue to show the full
+PNG; use `view(...)` in code to render a reproducible zoom.
+
+2D export text defaults to dark `#1f2937`, with 16 px ticks and colorbar labels,
+18 px axis names, 26 px titles, and 16 px annotations. PNG's built-in bitmap
+font now uses the requested glyph height with fractional antialiasing, so
+12–15 px sizes no longer collapse to 7 px. Customize axes, titles and colorbars
+with `.typography(size: 20, color: "#152535")`; annotation layers retain their
+own `label_size` and `label_color` options. Default padding is 72 px.
 
 Run the two Sputnik examples (damped oscillation and synthetic Ohm's-law
 measurements with a least-squares fit):
@@ -209,7 +234,7 @@ mkdir -p out/paper
 ```
 
 `out/paper/` contains both tiles and both graphs in PNG and self-contained SVG,
-plus a zoomed oscillation example. Source: [examples/graph_paper.s](examples/graph_paper.s).
+plus zoomed views of both graphs. Source: [examples/graph_paper.s](examples/graph_paper.s).
 For the focused tile checks:
 
 ```sh

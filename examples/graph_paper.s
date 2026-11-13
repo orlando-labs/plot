@@ -23,9 +23,9 @@ def oscillation(paper):
     .hline(0, stroke: "#735a42", stroke_width: 1, dash: [])
     .line(signal, stroke: "#234663", stroke_width: 2.5)
     .annotate([7.8, 3.6], "4 exp(-0.22 t) cos(2 PI 0.65 t)",
-      fill: "none", stroke: "none", label_color: "#234663", label_size: 14, dx: 0, dy: -8)
+      fill: "none", stroke: "none", label_color: "#193b57", dx: 0, dy: -8)
     .annotate([8.6, 1.8], "ENVELOPE: +/- 4 exp(-0.22 t)",
-      fill: "none", stroke: "none", label_color: "#8b4c2e", label_size: 12, dx: 0, dy: -8)
+      fill: "none", stroke: "none", label_color: "#703b24", dx: 0, dy: -8)
 
 def measurements(paper):
   # Synthetic laboratory readings with deterministic measurement error.
@@ -56,9 +56,9 @@ def measurements(paper):
       stroke: "#244c64", stroke_width: 1.1, dash: [], opacity: 0.85)
   result.points(samples, fill: paper.color, stroke: "#244c64", stroke_width: 2, radius: 4.5)
     .annotate([2.4, 2.05], "11 SYNTHETIC MEASUREMENTS", fill: "none", stroke: "none",
-      label_color: "#244c64", label_size: 14, dx: 0, dy: -8)
+      label_color: "#173d55", dx: 0, dy: -8)
     .annotate([2.4, 1.78], "LEAST-SQUARES FIT / R ~ 4.7 kOhm", fill: "none", stroke: "none",
-      label_color: "#9e493b", label_size: 12, dx: 0, dy: -8)
+      label_color: "#803629", dx: 0, dy: -8)
 
 def main():
   amber = plot.graph_paper(style: :amber)
@@ -74,5 +74,8 @@ def main():
   second.save("out/paper/ohms-law.png")
   second.save("out/paper/ohms-law.svg")
   first.view(x: [2, 5], y: [-2, 2]).save("out/paper/oscillation-detail.png")
+  first.view(x: [2, 5], y: [-2, 2]).save("out/paper/oscillation-detail.svg")
+  second.view(x: [3, 7], y: [0.5, 1.6]).save("out/paper/ohms-law-detail.png")
+  second.view(x: [3, 7], y: [0.5, 1.6]).save("out/paper/ohms-law-detail.svg")
   print("Graph paper tiles and Sputnik plots saved to out/paper/")
   0

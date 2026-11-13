@@ -413,34 +413,48 @@ static void glyph_rows(char input, uint8_t rows[7]) {
 static void draw_text(PlotCanvas *canvas, double x, double y, double size,
                       int align, PlotColor color, const char *text,
                       size_t length) {
-  int scale = (int)floor(size / 8.0);
-  int glyph_width;
-  int total_width;
-  int start_x;
+  double scale, advance, start_x, total_width;
+  int top, bottom;
   size_t index;
-  if (scale < 1) scale = 1;
-  glyph_width = 6 * scale;
-  total_width = (int)length * glyph_width;
-  start_x = (int)round(x);
-  if (align == 1) start_x -= total_width / 2;
+  if (!isfinite(x) || !isfinite(y) || !isfinite(size) || size <= 0) return;
+  /* Size is the actual seven-row glyph height. Preserve fractional scaling
+     instead of reducing every size between 8 and 15 to a seven-pixel font. */
+  scale = size / 7.0;
+  advance = 6.0 * scale;
+  total_width = length ? (length * 6.0 - 1.0) * scale : 0;
+  if (!isfinite(total_width)) return;
+  start_x = x;
+  if (align == 1) start_x -= total_width / 2.0;
   if (align == 2) start_x -= total_width;
+  top = (int)clamp_double(floor(y), canvas->clip_top, canvas->clip_bottom);
+  bottom = (int)clamp_double(ceil(y + size), canvas->clip_top, canvas->clip_bottom);
   for (index = 0; index < length; ++index) {
     uint8_t rows[7];
-    int row;
+    double gx = start_x + index * advance;
+    int left = (int)clamp_double(floor(gx), canvas->clip_left, canvas->clip_right);
+    int right = (int)clamp_double(ceil(gx + 5.0 * scale), canvas->clip_left, canvas->clip_right);
+    int px, py;
     glyph_rows(text[index], rows);
-    for (row = 0; row < 7; ++row) {
-      int column;
-      for (column = 0; column < 5; ++column) {
-        if ((rows[row] & (1u << (4 - column))) != 0) {
-          int sy;
-          for (sy = 0; sy < scale; ++sy) {
-            int sx;
-            for (sx = 0; sx < scale; ++sx) {
-              blend_pixel(canvas, start_x + (int)index * glyph_width + column * scale + sx,
-                          (int)round(y) + row * scale + sy, color, 1.0);
+    /* Integrate covered glyph-cell area and composite once per output pixel.
+       Adjacent filled cells remain solid, with antialiasing only at edges. */
+    for (py = top; py < bottom; ++py) {
+      int r0 = (int)clamp_double(floor((py - y) / scale), 0, 6);
+      int r1 = (int)clamp_double(floor((py + 1.0 - y) / scale), 0, 6);
+      for (px = left; px < right; ++px) {
+        int c0 = (int)clamp_double(floor((px - gx) / scale), 0, 4);
+        int c1 = (int)clamp_double(floor((px + 1.0 - gx) / scale), 0, 4);
+        double coverage = 0;
+        int row, col;
+        for (row = r0; row <= r1; ++row) {
+          double dy = fmax(0, fmin(py + 1.0, y + (row + 1) * scale) - fmax(py, y + row * scale));
+          for (col = c0; col <= c1; ++col) {
+            if (rows[row] & (1u << (4 - col))) {
+              double dx = fmax(0, fmin(px + 1.0, gx + (col + 1) * scale) - fmax(px, gx + col * scale));
+              coverage += dx * dy;
             }
           }
         }
+        if (coverage > 0) blend_pixel(canvas, px, py, color, coverage);
       }
     }
   }

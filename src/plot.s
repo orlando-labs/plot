@@ -7,7 +7,7 @@ package plot
 export figure, point, polygon, feature, palette
 export figure3d, point3, view3d
 export image, RasterImage
-export graph_paper, tiled_background, TiledBackground
+export graph_paper, tiled_background, TiledBackground, GraphPaper
 export Figure, Point, Polygon, Feature, Palette, Layer, Diagnostic, Rendered
 export Figure3D, Point3, ViewState3D, Scene3D, Layer3D
 export PlotError, ValidationError, UnsupportedFormatError
@@ -70,6 +70,18 @@ class TiledBackground:
   def save(path, format: null):
     figure(width: @raster.width, height: @raster.height, background: self)
       .axes(show: false).coordinates(padding: 0).save(path, format: format)
+
+# The sample tile is exportable, but figure grids are vector lines in data
+# coordinates. Only the grain repeats in screen space underneath those lines.
+class GraphPaper < TiledBackground:
+  attr texture_raster
+  attr ink
+  attr spacing
+
+  def init(@raster, @texture_raster, @color, @ink, @spacing)
+
+  def save(path, format: null):
+    tiled_background(@raster, color: @color).save(path, format: format)
 
 class Diagnostic:
   attr severity
@@ -313,10 +325,15 @@ class Figure:
   attr domain_value
   attr x_label
   attr y_label
+  attr x_step
+  attr y_step
+  attr font_size
+  attr text_color
 
   def init(width: 1120, height: 700, background: "#ffffff", layers: [],
-      title: null, axes: true, aspect: :auto, y_direction: :up, padding: 56,
-      palette: null, domain: null, x_label: null, y_label: null):
+      title: null, axes: true, aspect: :auto, y_direction: :up, padding: 72,
+      palette: null, domain: null, x_label: null, y_label: null,
+      x_step: null, y_step: null, font_size: 16, text_color: "#1f2937"):
     _require_positive(width, "width")
     _require_positive(height, "height")
     @width = width
@@ -333,6 +350,13 @@ class Figure:
     @domain_value = domain unless Array === domain
     @x_label = x_label
     @y_label = y_label
+    _require_positive(x_step, "x tick step") if x_step != null
+    _require_positive(y_step, "y tick step") if y_step != null
+    _require_positive(font_size, "font size")
+    @x_step = x_step
+    @y_step = y_step
+    @font_size = font_size
+    @text_color = text_color
 
   def screen(width: @width, height: @height):
     _copy({width: width, height: height})
@@ -340,8 +364,13 @@ class Figure:
   def title(value):
     _copy({title: value})
 
-  def axes(show: true, x_label: @x_label, y_label: @y_label):
-    _copy({axes: show, x_label: x_label, y_label: y_label})
+  def axes(show: true, x_label: @x_label, y_label: @y_label,
+      x_step: @x_step, y_step: @y_step):
+    _copy({axes: show, x_label: x_label, y_label: y_label,
+      x_step: x_step, y_step: y_step})
+
+  def typography(size: @font_size, color: @text_color):
+    _copy({font_size: size, text_color: color})
 
   def coordinates(aspect: @aspect_mode, y: @y_direction, padding: @padding_value):
     unless aspect == :auto or aspect == :equal:
@@ -481,7 +510,7 @@ class Figure:
   # Reference lines span the resolved plot domain and do not change the other
   # axis. They are useful for asymptotes, thresholds and technical guides.
   def vline(x, label: null, stroke: "#64748b", stroke_width: 1.25,
-      opacity: 0.8, dash: [6, 5], label_color: null, label_size: 12,
+      opacity: 0.8, dash: [6, 5], label_color: null, label_size: 16,
       label_at: :start, dx: 6, dy: 6):
     _require_number(x, "vertical line x")
     options = _annotation_options(dash, label_color or stroke, label_size,
@@ -490,8 +519,8 @@ class Figure:
       opacity: opacity, label: label, options: options))
 
   def hline(y, label: null, stroke: "#64748b", stroke_width: 1.25,
-      opacity: 0.8, dash: [6, 5], label_color: null, label_size: 12,
-      label_at: :end, dx: -6, dy: -14):
+      opacity: 0.8, dash: [6, 5], label_color: null, label_size: 16,
+      label_at: :end, dx: -6, dy: -22):
     _require_number(y, "horizontal line y")
     options = _annotation_options(dash, label_color or stroke, label_size,
       label_at, dx, dy)
@@ -501,7 +530,7 @@ class Figure:
   # An arbitrary annotated technical segment in data coordinates.
   def guide(start, finish, label: null, stroke: "#64748b",
       stroke_width: 1.25, opacity: 0.8, dash: [], label_color: null,
-      label_size: 12, label_at: :middle, dx: 0, dy: -14):
+      label_size: 16, label_at: :middle, dx: 0, dy: -20):
     guide_points = [_coerce_point(start), _coerce_point(finish)]
     options = _annotation_options(dash, label_color or stroke, label_size,
       label_at, dx, dy)
@@ -512,7 +541,7 @@ class Figure:
   # every data scale and in both vector and raster output.
   def annotate(point, label, fill: "#b91c1c", radius: 5,
       stroke: "#ffffff", stroke_width: 1.5, opacity: 1,
-      label_color: "#374151", label_size: 12, dx: 8, dy: -12):
+      label_color: "#1f2937", label_size: 16, dx: 8, dy: -24):
     _require_positive(radius, "annotation radius")
     options = _annotation_options([], label_color, label_size, :start, dx, dy)
     options.store!(:radius, radius)
@@ -675,7 +704,11 @@ class Figure:
       palette: _pick(changes, :palette, @palette_value),
       domain: _pick(changes, :domain, @domain_value),
       x_label: _pick(changes, :x_label, @x_label),
-      y_label: _pick(changes, :y_label, @y_label))
+      y_label: _pick(changes, :y_label, @y_label),
+      x_step: _pick(changes, :x_step, @x_step),
+      y_step: _pick(changes, :y_step, @y_step),
+      font_size: _pick(changes, :font_size, @font_size),
+      text_color: _pick(changes, :text_color, @text_color))
 
 class Figure3D:
   attr width
@@ -862,8 +895,7 @@ def image(source):
 def tiled_background(source, color: "#ffffff"):
   TiledBackground(source, color: color)
 
-# One major square per tile, with intermediate lines every five subdivisions.
-# All marks sit inside the tile so seams neither omit nor double a grid line.
+# Export a sample tile, and retain grain and ink separately for data-space grids.
 def graph_paper(style: :amber, spacing: 8, texture: true):
   unless Int === spacing and spacing >= 4 and spacing <= 32:
     raise ArgumentError("graph paper spacing must be an integer from 4 to 32 pixels")
@@ -887,6 +919,7 @@ def graph_paper(style: :amber, spacing: 8, texture: true):
       y = seed % size + 0.5
       flecks.push!([x, y])
     commands.push!([3, "#76634b", "none", 0, 0.055, 0.45, flecks])
+  grain = image(_render_png_native(size, size, paper, commands))
   10.times |i|:
     width = 0.55
     opacity = 0.35
@@ -899,11 +932,16 @@ def graph_paper(style: :amber, spacing: 8, texture: true):
     p = i * spacing + 0.5
     commands.push!([2, ink, width, opacity, [[p, -1], [p, size + 1]]])
     commands.push!([2, ink, width, opacity, [[-1, p], [size + 1, p]]])
-  tiled_background(_render_png_native(size, size, paper, commands), color: paper)
+  sample = image(_render_png_native(size, size, paper, commands))
+  GraphPaper(sample, grain, paper, ink, spacing)
 
 def _background_color(background):
   return background.color if TiledBackground === background
   background
+
+def _background_raster(background):
+  return background.texture_raster if GraphPaper === background
+  background.raster
 
 def figure3d(width: 1120, height: 760, background: "#f8fafc"):
   Figure3D(width: width, height: height, background: background)
@@ -1641,8 +1679,71 @@ def _layout(figure, bounds):
     sy = scale
     left = left + (plot_width - dx * scale) / 2.0
     top = top + (plot_height - dy * scale) / 2.0
+  paper = null
+  paper = figure.background if GraphPaper === figure.background
   {left: left, top: top, sx: sx, sy: sy,
-    plot_width: dx * sx, plot_height: dy * sy, bounds: bounds}
+    plot_width: dx * sx, plot_height: dy * sy, bounds: bounds,
+    x_axis: _axis_spec(bounds[0], bounds[2], dx * sx, figure.x_step, paper),
+    y_axis: _axis_spec(bounds[1], bounds[3], dy * sy, figure.y_step, paper)}
+
+# Tick multiples are anchored to data zero, including when a view starts
+# between ticks. Both backends consume the same values and screen transform.
+def _axis_spec(low, high, pixels, step, paper):
+  if step == null and paper == null:
+    values = []
+    6.times |i|: values.push!(low + i / 5.0 * (high - low))
+    return {step: (high - low) / 5.0, values: values}
+  if step == null:
+    intervals = Math.max(2, Math.min(10, Math.floor(pixels / (paper.spacing * 10))))
+    raw = (high - low) * 1.0 / intervals
+    unit = Math.pow(10, Math.floor(Math.log10(raw)))
+    step = unit * 10
+    [10, 5, 2.5, 2, 1].each |factor|:
+      step = unit * factor if unit * factor >= raw
+  {step: step, values: _tick_values(low, high, step)}
+
+def _tick_values(low, high, step):
+  first = Math.ceil(low * 1.0 / step - 0.000000001)
+  last = Math.floor(high * 1.0 / step + 0.000000001)
+  count = last - first + 1
+  unless count >= 0 and count <= 4096:
+    raise ArgumentError("tick step is too small for this view; use a larger step or auto")
+  values = []
+  count.to_int().times |i|:
+    value = (first + i) * step
+    value = 0 if Math.abs(value) < step * 0.000000001
+    values.push!(value)
+  values
+
+def _paper_grid_lines(figure, layout):
+  lines = []
+  [:x, :y].each |axis|:
+    spec = layout[:x_axis]
+    low = layout[:bounds][0]
+    high = layout[:bounds][2]
+    if axis == :y:
+      spec = layout[:y_axis]
+      low = layout[:bounds][1]
+      high = layout[:bounds][3]
+    step = spec[:step]
+    _tick_values(low, high, step / 10.0).each |value|:
+      level = 1
+      level = 5 if Math.abs(value / (step / 2.0) - Math.round(value / (step / 2.0))) < 0.0000001
+      if Math.abs(value / step - Math.round(value / step)) < 0.0000001:
+        level = 10
+        value = Math.round(value / step) * step
+      point = Point(value, layout[:bounds][1])
+      point = Point(layout[:bounds][0], value) if axis == :y
+      p = _screen_point(point, layout, figure.y_direction)
+      position = p.x
+      position = p.y if axis == :y
+      lines.push!([axis, value, position, level])
+  lines
+
+def _paper_line_style(level):
+  return [1.1, 0.65] if level == 10
+  return [0.8, 0.45] if level == 5
+  [0.55, 0.28]
 
 def _screen_point(point, layout, y_direction):
   x = layout[:left] + (point.x - layout[:bounds][0]) * layout[:sx]
@@ -1710,10 +1811,11 @@ def _png_commands(figure, bounds):
   layout = _layout(figure, bounds)
   commands = []
   if TiledBackground === figure.background:
-    raster = figure.background.raster
+    raster = _background_raster(figure.background)
     commands.push!([8, raster.width, raster.height, raster.pixels])
+  _png_paper_grid(commands, figure, layout) if GraphPaper === figure.background
   if figure.title_text:
-    commands.push!([4, "#111827", 20, figure.width / 2.0, 18, 1,
+    commands.push!([4, figure.text_color, figure.font_size * 1.625, figure.width / 2.0, 20, 1,
       figure.title_text.to_str])
   if figure.axes_visible:
     _png_axes(commands, figure, layout)
@@ -1729,26 +1831,39 @@ def _png_axes(commands, figure, layout):
   top = layout[:top]
   right = left + layout[:plot_width]
   bottom = top + layout[:plot_height]
-  6.times |i|:
-    ratio = i / 5.0
-    x = left + ratio * layout[:plot_width]
-    y = top + ratio * layout[:plot_height]
-    xv = layout[:bounds][0] + ratio * (layout[:bounds][2] - layout[:bounds][0])
-    yv = layout[:bounds][3] - ratio * (layout[:bounds][3] - layout[:bounds][1])
-    yv = layout[:bounds][1] + ratio * (layout[:bounds][3] - layout[:bounds][1]) if figure.y_direction == :down
+  size = figure.font_size
+  layout[:x_axis][:values].each |value|:
+    x = _screen_point(Point(value, layout[:bounds][1]), layout, figure.y_direction).x
     unless TiledBackground === figure.background:
       commands.push!([2, "#e5e7eb", 1, 1, [[x, top], [x, bottom]]])
+    commands.push!([4, figure.text_color, size, x, bottom + 12, 1, _tick(value, step: layout[:x_axis][:step])])
+  layout[:y_axis][:values].each |value|:
+    y = _screen_point(Point(layout[:bounds][0], value), layout, figure.y_direction).y
+    unless TiledBackground === figure.background:
       commands.push!([2, "#e5e7eb", 1, 1, [[left, y], [right, y]]])
-    commands.push!([4, "#4b5563", 11, x, bottom + 9, 1, _tick(xv)])
-    commands.push!([4, "#4b5563", 11, left - 8, y - 4, 2, _tick(yv)])
+    commands.push!([4, figure.text_color, size, left - 12, y - size / 2.0, 2, _tick(value, step: layout[:y_axis][:step])])
   frame = [[left, top], [right, top], [right, bottom], [left, bottom]]
-  commands.push!([1, "none", "#9ca3af", 1, 1, [frame]])
+  commands.push!([1, "none", "#64748b", 1, 1, [frame]])
   if figure.x_label:
-    commands.push!([4, "#374151", 13, (left + right) / 2.0,
-      bottom + 33, 1, figure.x_label.to_str])
+    commands.push!([4, figure.text_color, size * 1.125, (left + right) / 2.0,
+      bottom + size + 24, 1, figure.x_label.to_str])
   if figure.y_label:
-    commands.push!([4, "#374151", 13, left, top - 22, 0,
+    commands.push!([4, figure.text_color, size * 1.125, left, top - size * 1.125 - 16, 0,
       figure.y_label.to_str])
+  commands
+
+def _png_paper_grid(commands, figure, layout):
+  left = layout[:left]
+  top = layout[:top]
+  right = left + layout[:plot_width]
+  bottom = top + layout[:plot_height]
+  commands.push!([5, left, top, layout[:plot_width], layout[:plot_height]])
+  _paper_grid_lines(figure, layout).each |line|:
+    style = _paper_line_style(line[3])
+    points = [[line[2], top], [line[2], bottom]]
+    points = [[left, line[2]], [right, line[2]]] if line[0] == :y
+    commands.push!([2, figure.background.ink, style[0], style[1], points])
+  commands.push!([6])
   commands
 
 def _png_layer(commands, layer, figure, layout, index, fit_labels: true):
@@ -1807,7 +1922,7 @@ def _png_annotation_label(commands, layer, points, layout, y_direction, fit_labe
   commands
 
 def _annotation_label_fits(layer, position, layout):
-  width = layer.label.to_str.length() * layer.options[:label_size] * 0.75
+  width = layer.label.to_str.length() * layer.options[:label_size] * 6.0 / 7.0
   left = position[0] - width * position[2] / 2.0
   left >= layout[:left] and left + width <= layout[:left] + layout[:plot_width] and position[1] >= layout[:top] and position[1] + layer.options[:label_size] <= layout[:top] + layout[:plot_height]
 
@@ -1842,11 +1957,11 @@ def _png_colorbars(commands, figure, layout):
         commands.push!([1, color, "none", 0, 1, [cell]])
       frame = [[x, y], [x + 14, y], [x + 14, y + bar_height], [x, y + bar_height]]
       commands.push!([1, "none", "#9ca3af", 1, 1, [frame]])
-      commands.push!([4, "#374151", 11, x + 20, y, 0, _tick(extent[1])])
-      commands.push!([4, "#374151", 11, x + 20, y + bar_height - 7, 0,
+      commands.push!([4, figure.text_color, figure.font_size, x + 20, y, 0, _tick(extent[1])])
+      commands.push!([4, figure.text_color, figure.font_size, x + 20, y + bar_height - figure.font_size, 0,
         _tick(extent[0])])
       if layer.label:
-        commands.push!([4, "#374151", 11, x, y - 15, 0, layer.label.to_str])
+        commands.push!([4, figure.text_color, figure.font_size, x, y - figure.font_size - 10, 0, layer.label.to_str])
       bar_index = bar_index + 1
   commands
 
@@ -1861,14 +1976,17 @@ def _render_svg(figure, bounds):
   out.push!("<rect width=\"100%\" height=\"100%\" fill=\"" +
     _xml(_background_color(figure.background)) + "\"/>")
   if TiledBackground === figure.background:
-    raster = figure.background.raster
+    raster = _background_raster(figure.background)
     out.push!("<defs><pattern id=\"plot-paper\" patternUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"" +
       _n(raster.width) + "\" height=\"" + _n(raster.height) + "\"><image width=\"" +
       _n(raster.width) + "\" height=\"" + _n(raster.height) +
       "\" href=\"data:image/png;base64," + Base64.encode(raster.png) + "\"/></pattern></defs>")
     out.push!("<rect width=\"100%\" height=\"100%\" fill=\"url(#plot-paper)\"/>")
+  out.push!(_render_paper_grid(figure, layout)) if GraphPaper === figure.background
   if figure.title_text:
-    out.push!("<text x=\"" + _n(figure.width / 2.0) + "\" y=\"32\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#111827\">" + _xml(figure.title_text.to_str) + "</text>")
+    out.push!("<text x=\"" + _n(figure.width / 2.0) + "\" y=\"" + _n(20 + figure.font_size * 1.625) +
+      "\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"" + _n(figure.font_size * 1.625) +
+      "\" font-weight=\"600\" fill=\"" + _xml(figure.text_color) + "\">" + _xml(figure.title_text.to_str) + "</text>")
   if figure.axes_visible:
     out.push!(_render_axes(figure, layout))
   out.push!("<defs><clipPath id=\"plot-clip\"><rect x=\"" + _n(layout[:left]) + "\" y=\"" + _n(layout[:top]) + "\" width=\"" + _n(layout[:plot_width]) + "\" height=\"" + _n(layout[:plot_height]) + "\"/></clipPath></defs>")
@@ -1886,25 +2004,45 @@ def _render_axes(figure, layout):
   top = layout[:top]
   right = left + layout[:plot_width]
   bottom = top + layout[:plot_height]
-  out.push!("<g class=\"axes\" font-family=\"system-ui,sans-serif\" font-size=\"11\" fill=\"#4b5563\">")
-  6.times |i|:
-    ratio = i / 5.0
-    x = left + ratio * layout[:plot_width]
-    y = top + ratio * layout[:plot_height]
-    xv = layout[:bounds][0] + ratio * (layout[:bounds][2] - layout[:bounds][0])
-    yv = layout[:bounds][3] - ratio * (layout[:bounds][3] - layout[:bounds][1])
-    yv = layout[:bounds][1] + ratio * (layout[:bounds][3] - layout[:bounds][1]) if figure.y_direction == :down
+  size = figure.font_size
+  out.push!("<g class=\"axes\" font-family=\"system-ui,sans-serif\" font-size=\"" + _n(size) +
+    "\" fill=\"" + _xml(figure.text_color) + "\">")
+  layout[:x_axis][:values].each |value|:
+    x = _screen_point(Point(value, layout[:bounds][1]), layout, figure.y_direction).x
     unless TiledBackground === figure.background:
       out.push!("<line x1=\"" + _n(x) + "\" y1=\"" + _n(top) + "\" x2=\"" + _n(x) + "\" y2=\"" + _n(bottom) + "\" stroke=\"#e5e7eb\"/>")
+    out.push!("<text class=\"axis-tick x\" data-value=\"" + _n(value) + "\" x=\"" + _n(x) + "\" y=\"" + _n(bottom + 12 + size) + "\" text-anchor=\"middle\">" + _tick(value, step: layout[:x_axis][:step]) + "</text>")
+  layout[:y_axis][:values].each |value|:
+    y = _screen_point(Point(layout[:bounds][0], value), layout, figure.y_direction).y
+    unless TiledBackground === figure.background:
       out.push!("<line x1=\"" + _n(left) + "\" y1=\"" + _n(y) + "\" x2=\"" + _n(right) + "\" y2=\"" + _n(y) + "\" stroke=\"#e5e7eb\"/>")
-    out.push!("<text x=\"" + _n(x) + "\" y=\"" + _n(bottom + 18) + "\" text-anchor=\"middle\">" + _tick(xv) + "</text>")
-    out.push!("<text x=\"" + _n(left - 8) + "\" y=\"" + _n(y + 4) + "\" text-anchor=\"end\">" + _tick(yv) + "</text>")
-  out.push!("<rect x=\"" + _n(left) + "\" y=\"" + _n(top) + "\" width=\"" + _n(layout[:plot_width]) + "\" height=\"" + _n(layout[:plot_height]) + "\" fill=\"none\" stroke=\"#9ca3af\"/>")
+    out.push!("<text class=\"axis-tick y\" data-value=\"" + _n(value) + "\" x=\"" + _n(left - 12) + "\" y=\"" + _n(y + size * 0.35) + "\" text-anchor=\"end\">" + _tick(value, step: layout[:y_axis][:step]) + "</text>")
+  out.push!("<rect x=\"" + _n(left) + "\" y=\"" + _n(top) + "\" width=\"" + _n(layout[:plot_width]) + "\" height=\"" + _n(layout[:plot_height]) + "\" fill=\"none\" stroke=\"#64748b\"/>")
   if figure.x_label:
-    out.push!("<text x=\"" + _n((left + right) / 2.0) + "\" y=\"" + _n(bottom + 42) + "\" text-anchor=\"middle\" font-size=\"13\">" + _xml(figure.x_label.to_str) + "</text>")
+    out.push!("<text x=\"" + _n((left + right) / 2.0) + "\" y=\"" + _n(bottom + size * 2.125 + 24) + "\" text-anchor=\"middle\" font-size=\"" + _n(size * 1.125) + "\">" + _xml(figure.x_label.to_str) + "</text>")
   if figure.y_label:
     mid = (top + bottom) / 2.0
-    out.push!("<text x=\"18\" y=\"" + _n(mid) + "\" text-anchor=\"middle\" font-size=\"13\" transform=\"rotate(-90 18 " + _n(mid) + ")\">" + _xml(figure.y_label.to_str) + "</text>")
+    out.push!("<text x=\"24\" y=\"" + _n(mid) + "\" text-anchor=\"middle\" font-size=\"" + _n(size * 1.125) + "\" transform=\"rotate(-90 24 " + _n(mid) + ")\">" + _xml(figure.y_label.to_str) + "</text>")
+  out.push!("</g>")
+  out.join("")
+
+def _render_paper_grid(figure, layout):
+  out = ["<g class=\"paper-grid\" clip-path=\"url(#plot-clip)\">"]
+  _paper_grid_lines(figure, layout).each |line|:
+    style = _paper_line_style(line[3])
+    level = "minor"
+    level = "middle" if line[3] == 5
+    level = "major" if line[3] == 10
+    start = [line[2], layout[:top]]
+    finish = [line[2], layout[:top] + layout[:plot_height]]
+    if line[0] == :y:
+      start = [layout[:left], line[2]]
+      finish = [layout[:left] + layout[:plot_width], line[2]]
+    out.push!("<line class=\"paper-grid-line " + level + " " + line[0].to_str +
+      "\" data-value=\"" + _n(line[1]) + "\" x1=\"" + _n(start[0]) + "\" y1=\"" + _n(start[1]) +
+      "\" x2=\"" + _n(finish[0]) + "\" y2=\"" + _n(finish[1]) + "\" stroke=\"" +
+      _xml(figure.background.ink) + "\" stroke-width=\"" + _n(style[0]) +
+      "\" opacity=\"" + _n(style[1]) + "\"/>")
   out.push!("</g>")
   out.join("")
 
@@ -1951,7 +2089,8 @@ def _render_image_layer(layer, figure, layout, index):
     Base64.encode(layer.options[:image].png) + "\"/>")
 
 def _render_colorbars(figure, layout):
-  out = ["<g class=\"colorbars\" font-family=\"system-ui,sans-serif\" font-size=\"11\" fill=\"#374151\">"]
+  out = ["<g class=\"colorbars\" font-family=\"system-ui,sans-serif\" font-size=\"" +
+    _n(figure.font_size) + "\" fill=\"" + _xml(figure.text_color) + "\">"]
   bar_index = 0
   figure.layers.each_with_index |layer, layer_index|:
     values = _layer_values(layer)
@@ -2116,9 +2255,13 @@ def _tooltip(id, value, properties):
   return null if parts.count() == 0
   parts.join("; ")
 
-def _tick(value):
+def _tick(value, step: null):
   return value.to_str if Math.abs(value) < 0.001 or Math.abs(value) >= 1000000
-  rounded = Math.round(value * 1000000) / 1000000
+  digits = 6
+  if step != null and step < 1:
+    digits = Math.max(6, Math.min(15, Math.ceil(0 - Math.log10(step)) + 1))
+  factor = Math.pow(10.0, digits)
+  rounded = Math.round(value * factor) / factor
   rounded.to_str
 
 def _n(value):
