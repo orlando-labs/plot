@@ -7,6 +7,7 @@ package plot
 export figure, point, polygon, feature, palette
 export figure3d, point3, view3d
 export image, RasterImage
+export graph_paper, tiled_background, TiledBackground
 export Figure, Point, Polygon, Feature, Palette, Layer, Diagnostic, Rendered
 export Figure3D, Point3, ViewState3D, Scene3D, Layer3D
 export PlotError, ValidationError, UnsupportedFormatError
@@ -55,6 +56,20 @@ class RasterImage:
     @height = decoded[1]
     @png = decoded[2]
     @pixels = decoded[3]
+
+# Reuse one decoded image at its natural pixel size across the whole canvas.
+# The solid color remains visible through transparent parts of a custom tile.
+class TiledBackground:
+  attr raster
+  attr color
+
+  def init(source, color: "#ffffff"):
+    @raster = image(source)
+    @color = color
+
+  def save(path, format: null):
+    figure(width: @raster.width, height: @raster.height, background: self)
+      .axes(show: false).coordinates(padding: 0).save(path, format: format)
 
 class Diagnostic:
   attr severity
@@ -354,6 +369,7 @@ class Figure:
     # Version 1 notebook hosts cannot redraw raster layers. Keep their PNG
     # fallback instead of offering an interactive scene with missing images.
     return null if @layers.any? |layer|: layer.kind == :image
+    return null if TiledBackground === @background
     bounds = @domain_value or _figure_bounds(@layers)
     layout = _layout(self, bounds)
     scene_layers = []
@@ -614,7 +630,7 @@ class Figure:
       return Rendered(:svg, "image/svg+xml", svg, @width, @height, diagnostics,
         {bounds: bounds, layers: @layers.count(), backend: :svg})
     commands = _png_commands(self, bounds)
-    png = _render_png_native(@width, @height, @background, commands)
+    png = _render_png_native(@width, @height, _background_color(@background), commands)
     Rendered(:png, "image/png", png, @width, @height, diagnostics,
       {bounds: bounds, layers: @layers.count(), backend: :png})
 
@@ -842,6 +858,52 @@ def figure(width: 1120, height: 700, background: "#ffffff"):
 def image(source):
   return source if RasterImage === source
   RasterImage(source)
+
+def tiled_background(source, color: "#ffffff"):
+  TiledBackground(source, color: color)
+
+# One major square per tile, with intermediate lines every five subdivisions.
+# All marks sit inside the tile so seams neither omit nor double a grid line.
+def graph_paper(style: :amber, spacing: 8, texture: true):
+  unless Int === spacing and spacing >= 4 and spacing <= 32:
+    raise ArgumentError("graph paper spacing must be an integer from 4 to 32 pixels")
+  unless texture == true or texture == false:
+    raise ArgumentError("graph paper texture must be true or false")
+  colors = {amber: ["#faf3df", "#cc8653"], blue: ["#f0f5ed", "#6597ac"]}
+  unless colors.has_key?(style):
+    raise ArgumentError("graph paper style must be :amber or :blue")
+  paper = colors[style][0]
+  ink = colors[style][1]
+  size = spacing * 10
+  commands = []
+  if texture:
+    # A fixed sequence makes the paper reproducible without global random state.
+    flecks = []
+    seed = 1931
+    (size * size / 8).to_int().times |i|:
+      seed = (seed * 48271) % 2147483647
+      x = seed % size + 0.5
+      seed = (seed * 48271) % 2147483647
+      y = seed % size + 0.5
+      flecks.push!([x, y])
+    commands.push!([3, "#76634b", "none", 0, 0.055, 0.45, flecks])
+  10.times |i|:
+    width = 0.55
+    opacity = 0.35
+    if i == 5:
+      width = 0.8
+      opacity = 0.55
+    if i == 0:
+      width = 1
+      opacity = 0.8
+    p = i * spacing + 0.5
+    commands.push!([2, ink, width, opacity, [[p, -1], [p, size + 1]]])
+    commands.push!([2, ink, width, opacity, [[-1, p], [size + 1, p]]])
+  tiled_background(_render_png_native(size, size, paper, commands), color: paper)
+
+def _background_color(background):
+  return background.color if TiledBackground === background
+  background
 
 def figure3d(width: 1120, height: 760, background: "#f8fafc"):
   Figure3D(width: width, height: height, background: background)
@@ -1647,6 +1709,9 @@ def _has_color_scale(layers):
 def _png_commands(figure, bounds):
   layout = _layout(figure, bounds)
   commands = []
+  if TiledBackground === figure.background:
+    raster = figure.background.raster
+    commands.push!([8, raster.width, raster.height, raster.pixels])
   if figure.title_text:
     commands.push!([4, "#111827", 20, figure.width / 2.0, 18, 1,
       figure.title_text.to_str])
@@ -1671,8 +1736,9 @@ def _png_axes(commands, figure, layout):
     xv = layout[:bounds][0] + ratio * (layout[:bounds][2] - layout[:bounds][0])
     yv = layout[:bounds][3] - ratio * (layout[:bounds][3] - layout[:bounds][1])
     yv = layout[:bounds][1] + ratio * (layout[:bounds][3] - layout[:bounds][1]) if figure.y_direction == :down
-    commands.push!([2, "#e5e7eb", 1, 1, [[x, top], [x, bottom]]])
-    commands.push!([2, "#e5e7eb", 1, 1, [[left, y], [right, y]]])
+    unless TiledBackground === figure.background:
+      commands.push!([2, "#e5e7eb", 1, 1, [[x, top], [x, bottom]]])
+      commands.push!([2, "#e5e7eb", 1, 1, [[left, y], [right, y]]])
     commands.push!([4, "#4b5563", 11, x, bottom + 9, 1, _tick(xv)])
     commands.push!([4, "#4b5563", 11, left - 8, y - 4, 2, _tick(yv)])
   frame = [[left, top], [right, top], [right, bottom], [left, bottom]]
@@ -1793,7 +1859,14 @@ def _render_svg(figure, bounds):
     "\" height=\"" + _n(figure.height) + "\" viewBox=\"0 0 " +
     _n(figure.width) + " " + _n(figure.height) + "\" role=\"img\">")
   out.push!("<rect width=\"100%\" height=\"100%\" fill=\"" +
-    _xml(figure.background) + "\"/>")
+    _xml(_background_color(figure.background)) + "\"/>")
+  if TiledBackground === figure.background:
+    raster = figure.background.raster
+    out.push!("<defs><pattern id=\"plot-paper\" patternUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"" +
+      _n(raster.width) + "\" height=\"" + _n(raster.height) + "\"><image width=\"" +
+      _n(raster.width) + "\" height=\"" + _n(raster.height) +
+      "\" href=\"data:image/png;base64," + Base64.encode(raster.png) + "\"/></pattern></defs>")
+    out.push!("<rect width=\"100%\" height=\"100%\" fill=\"url(#plot-paper)\"/>")
   if figure.title_text:
     out.push!("<text x=\"" + _n(figure.width / 2.0) + "\" y=\"32\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"20\" font-weight=\"600\" fill=\"#111827\">" + _xml(figure.title_text.to_str) + "</text>")
   if figure.axes_visible:
@@ -1821,8 +1894,9 @@ def _render_axes(figure, layout):
     xv = layout[:bounds][0] + ratio * (layout[:bounds][2] - layout[:bounds][0])
     yv = layout[:bounds][3] - ratio * (layout[:bounds][3] - layout[:bounds][1])
     yv = layout[:bounds][1] + ratio * (layout[:bounds][3] - layout[:bounds][1]) if figure.y_direction == :down
-    out.push!("<line x1=\"" + _n(x) + "\" y1=\"" + _n(top) + "\" x2=\"" + _n(x) + "\" y2=\"" + _n(bottom) + "\" stroke=\"#e5e7eb\"/>")
-    out.push!("<line x1=\"" + _n(left) + "\" y1=\"" + _n(y) + "\" x2=\"" + _n(right) + "\" y2=\"" + _n(y) + "\" stroke=\"#e5e7eb\"/>")
+    unless TiledBackground === figure.background:
+      out.push!("<line x1=\"" + _n(x) + "\" y1=\"" + _n(top) + "\" x2=\"" + _n(x) + "\" y2=\"" + _n(bottom) + "\" stroke=\"#e5e7eb\"/>")
+      out.push!("<line x1=\"" + _n(left) + "\" y1=\"" + _n(y) + "\" x2=\"" + _n(right) + "\" y2=\"" + _n(y) + "\" stroke=\"#e5e7eb\"/>")
     out.push!("<text x=\"" + _n(x) + "\" y=\"" + _n(bottom + 18) + "\" text-anchor=\"middle\">" + _tick(xv) + "</text>")
     out.push!("<text x=\"" + _n(left - 8) + "\" y=\"" + _n(y + 4) + "\" text-anchor=\"end\">" + _tick(yv) + "</text>")
   out.push!("<rect x=\"" + _n(left) + "\" y=\"" + _n(top) + "\" width=\"" + _n(layout[:plot_width]) + "\" height=\"" + _n(layout[:plot_height]) + "\" fill=\"none\" stroke=\"#9ca3af\"/>")

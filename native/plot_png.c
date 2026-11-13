@@ -740,6 +740,28 @@ static SputnikStatus render_command(SputnikCtx *cx, PlotCanvas *canvas,
     draw_image(canvas, pixels, (int)sw, (int)sh, x, y, w, h, opacity);
     return SPUTNIK_OK;
   }
+  if (kind == 8) {
+    int64_t sw, sh;
+    const uint8_t *pixels;
+    size_t pixel_length;
+    int x, y;
+    if (length != 4 ||
+        !sputnik_as_int(cx, sputnik_list_at(cx, command, 1), &sw) ||
+        !sputnik_as_int(cx, sputnik_list_at(cx, command, 2), &sh) ||
+        sw < 1 || sh < 1 || sw > 16384 || sh > 16384 || sw * sh > 16000000 ||
+        !sputnik_bytes_view(cx, sputnik_list_at(cx, command, 3), &pixels, &pixel_length) ||
+        pixel_length != (size_t)sw * (size_t)sh * 4)
+      return sputnik_fault(cx, "ArgumentError", "invalid PNG background tile");
+    /* Sample the repeating image directly: one pass, no per-tile allocation or
+       filtering at seams. The phase stays anchored to canvas pixel (0, 0). */
+    for (y = canvas->clip_top; y < canvas->clip_bottom; ++y) {
+      for (x = canvas->clip_left; x < canvas->clip_right; ++x) {
+        const uint8_t *p = pixels + ((size_t)(y % sh) * (size_t)sw + (size_t)(x % sw)) * 4;
+        blend_pixel(canvas, x, y, (PlotColor){p[0], p[1], p[2], p[3]}, 1.0);
+      }
+    }
+    return SPUTNIK_OK;
+  }
   return sputnik_fault(cx, "ArgumentError", "unknown PNG drawing command");
 }
 

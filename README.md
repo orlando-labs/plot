@@ -168,6 +168,54 @@ pre-rendered images and scenes exceeding the host's limits retain the raster
 viewer. UI zoom is temporary presentation state, not a change to the Sputnik
 value or saved project; use `view(...)` in code for a reproducible view.
 
+## Experimental graph paper backgrounds
+
+The `experiment/graph-paper-backgrounds` branch adds repeatable paper tiles for
+2D figures. The tiles are generated procedurally in Sputnik: warm `:amber` or
+cool `:blue` paper, fine subdivisions, stronger lines every five and ten cells,
+and subtle, deterministic paper grain.
+
+```sputnik
+paper = plot.graph_paper(style: :amber, spacing: 8, texture: true)
+plot.figure(background: paper)
+  .line([[0, 0], [1, 2], [2, 1]], stroke: "#234663")
+  .save("old-school.png")
+paper.save("paper-tile.png")  # .svg also works
+
+# A custom PNG/JPEG/BMP/GIF path, Bytes, or loaded RasterImage works too.
+custom = plot.tiled_background("paper-tile.png", color: "#ffffff")
+plot.figure(background: custom).line([[0, 0], [1, 1]]).save("custom.svg")
+```
+
+`spacing` is an integer from 4 to 32 screen pixels. A tile spans ten cells on
+each side (80 × 80 pixels by default); `texture: false` produces clean paper.
+Each figure repeats its tile at natural size from canvas pixel `(0, 0)`, under
+axes, text and data. The tile is read once, embedded once into the SVG pattern,
+and repeated with alpha compositing in PNG. `color` is the underlay visible
+through transparent pixels of custom tiles. The ordinary gray axis grid is
+suppressed for tiled backgrounds; axes, ticks and labels remain visible.
+
+This is a decorative screen grid: its lines do not represent data units, and
+`view` and `screen` retain the same paper scale and phase. It currently applies
+to 2D figures. Scene-v1 notebook hosts show the complete PNG, as they do for
+raster image layers; use `view(...)` in code to export a detail.
+
+Run the two Sputnik examples (damped oscillation and synthetic Ohm's-law
+measurements with a least-squares fit):
+
+```sh
+mkdir -p out/paper
+../sputnik-lang/build/sputnik run examples/graph_paper.build.yaml --grant fs.write=out/paper --grant ffi
+```
+
+`out/paper/` contains both tiles and both graphs in PNG and self-contained SVG,
+plus a zoomed oscillation example. Source: [examples/graph_paper.s](examples/graph_paper.s).
+For the focused tile checks:
+
+```sh
+../sputnik-lang/build/sputnik run test/paper.build.yaml --grant fs.read=test/fixtures --grant fs.read=out/paper --grant fs.write=out/paper --grant ffi
+```
+
 ## Static 3D and view state
 
 `Figure3D` renders indexed geometry through a z-buffered native PNG backend.
