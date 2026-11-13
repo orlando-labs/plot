@@ -32,6 +32,7 @@ for archive in archives:
         shutil.rmtree(work)
     work.mkdir(parents=True)
     (work / 'out').mkdir()
+    (work / 'out/paper').mkdir()
     shutil.copytree(repo / 'test/fixtures', work / 'test/fixtures')
     text = rewrite((repo / 'test/selftest.s').read_text())
     text = text.replace('def main():', 'def _release_main():')
@@ -40,12 +41,15 @@ for archive in archives:
     source.write_text(text)
     files = work / 'images.s'
     files.write_text(rewrite((repo / 'test/images.s').read_text()))
+    paper = work / 'paper.s'
+    paper.write_text(rewrite((repo / 'test/paper.s').read_text()))
     # Give each consumer its own project root, including its lock file.
     (work / 'sputnik.build.yaml').write_text(
         'schema: sputnik.build.v1\nname: plot.release.check\n'
         'root: slowpilot.plot.selftest\nmodules:\n'
         '  - name: slowpilot.plot.selftest\n    path: check.s\n'
-        '  - name: slowpilot.plot.images_test\n    path: images.s\n')
+        '  - name: slowpilot.plot.images_test\n    path: images.s\n'
+        '  - name: slowpilot.plot.paper_test\n    path: paper.s\n')
     env = dict(os.environ, SPUTNIK_PKG_HOME=str(work / 'home'),
                SPUTNIK_NATIVE_EXT_CACHE=str(work / 'cache'))
     commands = [
@@ -53,6 +57,7 @@ for archive in archives:
          (['--build-from-source'] if '-source-' in archive.parent.name else [])),
         ('selftest', [cli, 'run', source, '--grant', 'ffi']),
         ('images', [cli, 'run', files, '--grant', 'ffi', '--grant', 'fs.read', '--grant', 'fs.write']),
+        ('paper', [cli, 'run', paper, '--grant', 'ffi', '--grant', 'fs.read', '--grant', 'fs.write']),
         ('lock', [cli, 'pkg', 'lock', source]),
     ]
     for label, command in commands:
@@ -65,6 +70,6 @@ for archive in archives:
     lock = (work / 'sputnik.lock').read_text()
     assert archive.parent.name in lock and info['sha256'] in lock
     reports.append(dict(variant=archive.parent.name, sha256=info['sha256'],
-                        conformance=53, image_files=True, lock=True))
+                        conformance=53, image_files=True, graph_paper=True, lock=True))
 (root / 'verification' / ('result-' + a.platform + '.json')).write_text(
     json.dumps(reports, indent=2) + '\n')

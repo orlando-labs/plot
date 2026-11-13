@@ -2,7 +2,7 @@ requires:
   sputnik: ">=1.0.0 <2.0.0"
 schema: "sputnik.build.v1"
 name: "plot"
-version: "0.2.0"
+version: "0.3.0"
 source_root: "src"
 profiles:
   required:

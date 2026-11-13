@@ -168,9 +168,9 @@ pre-rendered images and scenes exceeding the host's limits retain the raster
 viewer. UI zoom is temporary presentation state, not a change to the Sputnik
 value or saved project; use `view(...)` in code for a reproducible view.
 
-## Experimental graph paper backgrounds
+## Graph paper backgrounds (0.3.0)
 
-The `experiment/graph-paper-backgrounds` branch adds repeatable paper tiles for
+Version 0.3.0 adds repeatable paper tiles for
 2D figures. The tiles are generated procedurally in Sputnik: warm `:amber` or
 cool `:blue` paper, fine subdivisions, stronger lines every five and ten cells,
 and subtle, deterministic paper grain.

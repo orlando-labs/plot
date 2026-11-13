@@ -3,7 +3,7 @@
 Статус: спецификация v1; полигональное 2D-ядро, статический 3D-профиль, SVG и
 PNG backend реализованы.
 
-Эксперимент в ветке `experiment/graph-paper-backgrounds`: тайловый фон для 2D.
+В версии 0.3.0: тайловый фон и координатная миллиметровка для 2D.
 
 ```sputnik
 plot.graph_paper(style: :amber, spacing: 8, texture: true) -> GraphPaper
